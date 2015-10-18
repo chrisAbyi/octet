@@ -18,6 +18,9 @@ namespace octet {
 		int numRows, numCols, imgW, imgH, tileW, tileH;
 		float uvs[8];
 
+		// Store here so there's no need to decompose model-to-world matrix in order to infer rotation
+		float rotation;
+
 	public:
 		// where is our sprite (overkill for a 2D game!)
 		mat4t modelToWorld;
@@ -27,9 +30,14 @@ namespace octet {
 			enabled = true;
 		}
 
-		void init(int _texture, float x, float y, float w, float h) {
+		void init(int _texture, float x, float y, float rotation, float w, float h) {
+			x = (x * w) - (1 - w / 2);
+			y = (y * h) - (1 - h / 2);
+			y *= -1;
+
 			modelToWorld.loadIdentity();
 			modelToWorld.translate(x, y, 0);
+			modelToWorld.rotate(rotation, 0, 0, 1);
 			halfWidth = w * 0.5f;
 			halfHeight = h * 0.5f;
 			texture = _texture;
@@ -44,9 +52,16 @@ namespace octet {
 			uvs[7] = 1;
 		}
 
-		void init(int _texture, float x, float y, float w, float h, int tileIdx, int tW, int tH, int iW, int iH) {
+		void init(int _texture, float x, float y, float rotation, float w, float h, int tileIdx, int tW, int tH, int iW, int iH) {
+
+			x = (x * w) - (1 - w / 2);
+			y = (y * h) - (1 - h / 2);
+			y *= -1;
+
 			modelToWorld.loadIdentity();
 			modelToWorld.translate(x, y, 0);
+			modelToWorld.rotate(rotation, 0, 0, 1);
+
 			halfWidth = w * 0.5f;
 			halfHeight = h * 0.5f;
 			texture = _texture;
@@ -90,8 +105,17 @@ namespace octet {
 			return modelToWorld.row(3).xy();
 		}
 
+		float get_rot() {
+			return rotation;
+		}
+
 		void set_pos(vec2 p) {
 			modelToWorld.translate(vec3(p.x(), p.y(), 0.0f) - modelToWorld.row(3).xyz());
+		}
+
+		void set_rot(float _rotation) {
+			modelToWorld.rotate(_rotation,0,0,1);
+			rotation = _rotation;
 		}
 
 		void render(texture_shader &shader, mat4t &cameraToWorld) {
