@@ -33,6 +33,7 @@ namespace octet {
 
     // true if this sprite is enabled.
     bool enabled;
+
   public:
     sprite() {
       texture = 0;
@@ -195,7 +196,7 @@ namespace octet {
     ALuint sources[num_sound_sources];
 
     // big array of sprites
-    sprite sprites[num_sprites];
+    class sprite sprites[num_sprites];
 
     // random number generator
     class random randomizer;
