@@ -150,7 +150,6 @@ namespace octet {
 			glVertexAttribPointer(attribute_pos, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)vertices);
 			glEnableVertexAttribArray(attribute_pos);
 
-
 			// attribute_uv is position in the texture of each corner
 			// each corner (vertex) has 2 floats (x, y)
 			// there is no gap between the 2 floats and hence the stride is 2*sizeof(float)
@@ -187,8 +186,7 @@ namespace octet {
 			// for a collision
 			return
 				(fabsf(dx) < halfWidth + rhs.halfWidth) &&
-				(fabsf(dy) < halfHeight + rhs.halfHeight)
-				;
+				(fabsf(dy) < halfHeight + rhs.halfHeight);
 		}
 
 		bool is_above(const sprite &rhs, float margin) const {

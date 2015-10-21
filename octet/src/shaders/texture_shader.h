@@ -9,7 +9,7 @@
 namespace octet { namespace shaders {
   class texture_shader : public shader {
     // indices to use with glUniform*()
-
+  protected:
     // index for model space to projection space matrix
     GLuint modelToProjectionIndex_;
 

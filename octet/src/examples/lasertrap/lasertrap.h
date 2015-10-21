@@ -17,48 +17,120 @@ namespace octet {
 	static const int UNITS_Y = 40;
 	static const int TILE_SIZE = 32;
 	
-	class laser {
-		const vec2 positionOrigin;
-		const vec2 direction;
-		const std::array<int, 1600> &world;
-		vec2 positionHit;
-		float unitSize;
-	public:
+	class noisy_texture_shader : public texture_shader {
+		public:
+		void init(){
+			// kept the vertex shader     
+			const char vertex_shader[] = SHADER_STR(
+				varying vec2 uv_;
 
-		laser(const vec2 _positionOrigin, const vec2 _direction, const float _unitSize, const std::array<int, 1600> &_world) : positionOrigin(_positionOrigin), direction(_direction), unitSize(_unitSize), world(_world) {
-			checkHit();
+			attribute vec4 pos;
+			attribute vec2 uv;
+
+			uniform mat4 modelToProjection;
+
+			void main() { gl_Position = modelToProjection * pos; uv_ = uv; }
+			);
+
+			// modified the fragment shader
+			const char fragment_shader[] = SHADER_STR(
+				varying vec2 uv_;
+				uniform sampler2D sampler;
+				void main() { gl_FragColor = texture2D(sampler, uv_); }
+			);
+
+			// use the common shader code to compile and link the shaders
+			// the result is a shader program
+			shader::init(vertex_shader, fragment_shader);
+
+			// extract the indices of the uniforms to use later
+			modelToProjectionIndex_ = glGetUniformLocation(program(), "modelToProjection");
+			samplerIndex_ = glGetUniformLocation(program(), "sampler");
 		}
+	};
 
-		void checkHit() {
-			positionHit = positionOrigin;
+	class laser {
+		vec2 p0, p1, p2, p3;
+		mat4t modelToWorld; //where is the laser beam?
+		const std::array<int, 1600> &world;
+		float unitSize;
+		GLuint texture;
+
+		void calcCoordinates(const vec2 &positionOrigin, const vec2 &direction) {
+
+			//First check where laser hits a wall with respect to its direction
+			vec2 positionHit = positionOrigin;
 			int id = positionHit[1] * UNITS_X + positionHit[0];
 
-			while (world[id]!=0 && world[id]!=1) {
+			while (world[id] != 0 && world[id] != 1) {
 				positionHit += direction;
 				id = positionHit[1] * UNITS_X + positionHit[0];
 			}
-		}
 
-		void render() {
-			
+			//Transform abstract coordinates to model-view coordinates
 			float t = (1 - unitSize / 2);
+			p0 = ((positionOrigin-direction/2) * unitSize) - t;
+			p0[1] *= -1;
 
-			float xOrigin = (positionOrigin[0]*unitSize) - t;
-			float yOrigin = (positionOrigin[1]*unitSize) - t;
-			yOrigin *= -1;
+			p1 = ((positionHit-direction/2) * unitSize) - t;
+			p1[1] *= -1;
 
-			float xHit = (positionHit[0] * unitSize) - t;
-			float yHit = (positionHit[1] * unitSize) - t;;
-			yHit *= -1;
-
-			glLineWidth(2.5);
-			glColor3f(1.0, 0.0, 0.0);
-			glBegin(GL_LINES);
-			glVertex3f(xOrigin, yOrigin, 0.0);
-			glVertex3f(xHit, yHit, 0);
-			glEnd();
-			
+			//Add width to the laser, i.e. 2 more points in space
+			p2 = p1;
+			p3 = p0;
+			float half_width = 0.004;
+			if (p0[0] == p1[0]) {
+				p0[0] -= half_width;
+				p1[0] -= half_width;
+				p2[0] += half_width;
+				p3[0] += half_width;
+			}
+			else {
+				p0[1] -= half_width;
+				p1[1] -= half_width;
+				p2[1] += half_width;
+				p3[1] += half_width;
+			}
 		}
+
+	public:
+		laser(const vec2 _positionOrigin, const vec2 _direction, const float _unitSize, const std::array<int, 1600> &_world) : unitSize(_unitSize), world(_world) {
+			calcCoordinates(_positionOrigin, _direction);
+			texture = resource_dict::get_texture_handle(GL_RGBA, "#ff0000");
+		}
+
+		void render(mat4t &cameraToWorld) {
+			noisy_texture_shader shader;
+			shader.init();
+			// build a projection matrix: model -> world -> camera -> projection
+			// the projection space is the cube -1 <= x/w, y/w, z/w <= 1
+			mat4t modelToProjection = mat4t::build_projection_matrix(modelToWorld, cameraToWorld);
+
+			// set up opengl to draw textured triangles using sampler 0 (GL_TEXTURE0)
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, texture);
+
+			// use "old skool" rendering
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			shader.render(modelToProjection, 0);
+			float vertices[] = {
+				p0[0], p0[1], 0,
+				p1[0], p1[1], 0,
+				p2[0], p2[1], 0,
+				p3[0], p3[1], 0
+			};
+
+			// attribute_pos (=0) is position of each corner
+			// each corner has 3 floats (x, y, z)
+			// there is no gap between the 3 floats and hence the stride is 3*sizeof(float)
+			glVertexAttribPointer(attribute_pos, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)vertices);
+			glEnableVertexAttribArray(attribute_pos);
+
+			// finally, draw the sprite (4 vertices)
+			glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+		}
+
 	};
 
   /// Scene containing a box with octet.
@@ -69,6 +141,7 @@ namespace octet {
 	std::array<int, 1600> world;
 	std::vector<laser> lasers;
 	std::shared_ptr<character> thief;
+	sprite thiefSprite;
 
 	texture_shader shader;
 	mat4t cameraToWorld;
@@ -96,9 +169,6 @@ namespace octet {
 		//++framecount;
 		//player.move((framecount / 4) % 4);
 
-		//int vx = 0, vy = 0;
-		//get_viewport_size(vx, vy);
-
 		// set a viewport - includes whole window area
 		glViewport(x, y, w, h);
 
@@ -110,16 +180,8 @@ namespace octet {
 		glDisable(GL_DEPTH_TEST);
 
 		// allow alpha blend (transparency when alpha channel is 0)
-		glEnable(GL_ALPHA_TEST);
-		glAlphaFunc(GL_GREATER, 0);
-
 		glEnable(GL_BLEND);
-
-		//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-		//read_input();
-		//simulate();
 		
 		for (std::vector<sprite> s : sprites) {
 			for(sprite sp: s){
@@ -127,28 +189,13 @@ namespace octet {
 			}
 		}
 		
+		
 		for (laser l : lasers) {
-			l.render();
+			l.render(cameraToWorld);
 		}
 
 		thief->render(shader, cameraToWorld);
 		
-
-		/*
-      int vx = 0, vy = 0;
-      get_viewport_size(vx, vy);
-      app_scene->begin_render(vx, vy);
-
-      // update matrices. assume 30 fps.
-      app_scene->update(1.0f/30);
-
-      // draw the scene
-      app_scene->render((float)vx / vy);
-
-      // tumble the box  (there is only one mesh instance
-      scene_node *node = app_scene->get_mesh_instance(0)->get_node();
-      node->rotate(1, vec3(1, 0, 0));
-      node->rotate(1, vec3(0, 1, 0));*/
     }
 
 	// called every frame to move things
@@ -157,6 +204,16 @@ namespace octet {
 			return;
 		}
 
+		//Collision detection
+		/*
+		bool collision = false;
+		for (sprite wall : sprites[1]) {
+			collision = thiefSprite.collides_with(wall);
+			if (collision) {
+				std::cout << "collided!" << std::endl;
+				break;
+			}
+		}*/
 		move_character();
 	}
 
@@ -239,8 +296,8 @@ namespace octet {
 			}
 		}
 
+		// Load player character
 		GLuint tex = resource_dict::get_texture_handle(GL_RGBA, "#ffffff");
-		sprite thiefSprite;
 		thiefSprite.init(tex, 1, 7, 0, spriteSize, spriteSize);
 		thief = std::make_shared<character>(world);
 		thief->init(thiefSprite);

@@ -26,11 +26,11 @@ namespace octet {
 		}
 
 		void rotateLeft() {
-			characterSprite.set_rot(5);
+			characterSprite.set_rot(10);
 		}
 
 		void rotateRight() {
-			characterSprite.set_rot(-5);
+			characterSprite.set_rot(-10);
 		}
 
 		void moveForward() {
