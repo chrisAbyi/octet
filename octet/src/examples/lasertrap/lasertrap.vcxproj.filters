@@ -430,6 +430,7 @@
     <ClInclude Include="lasertrap.h" />
     <ClInclude Include="sprite.h" />
     <ClInclude Include="character.h" />
+    <ClInclude Include="noisy_texture_shader.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\mesh_builder.inl">

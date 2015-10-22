@@ -8,72 +8,68 @@
 #include<string>
 #include<sstream>
 #include<memory>
+#include <stdlib.h>
+#include <time.h> 
 #include "sprite.h"
 #include "character.h"
-
+#include "noisy_texture_shader.h"
 namespace octet {
 
 	static const int UNITS_X = 40;
 	static const int UNITS_Y = 40;
 	static const int TILE_SIZE = 32;
 	
-	class noisy_texture_shader : public texture_shader {
-		public:
-		void init(){
-			// kept the vertex shader     
-			const char vertex_shader[] = SHADER_STR(
-				varying vec2 uv_;
-
-			attribute vec4 pos;
-			attribute vec2 uv;
-
-			uniform mat4 modelToProjection;
-
-			void main() { gl_Position = modelToProjection * pos; uv_ = uv; }
-			);
-
-			// modified the fragment shader
-			const char fragment_shader[] = SHADER_STR(
-				varying vec2 uv_;
-				uniform sampler2D sampler;
-				void main() { gl_FragColor = texture2D(sampler, uv_); }
-			);
-
-			// use the common shader code to compile and link the shaders
-			// the result is a shader program
-			shader::init(vertex_shader, fragment_shader);
-
-			// extract the indices of the uniforms to use later
-			modelToProjectionIndex_ = glGetUniformLocation(program(), "modelToProjection");
-			samplerIndex_ = glGetUniformLocation(program(), "sampler");
-		}
-	};
-
 	class laser {
 		vec2 p0, p1, p2, p3;
-		mat4t modelToWorld; //where is the laser beam?
-		const std::array<int, 1600> &world;
+		mat4t modelToWorld;
+		const std::array<std::vector<sprite>, 4> &sprites;
 		float unitSize;
 		GLuint texture;
+		const vec2 &direction;
 
-		void calcCoordinates(const vec2 &positionOrigin, const vec2 &direction) {
+		/*
+		bool collides(const character &_character) {
+			
+			//Check where laser hits player with respect to its orientation
+			const vec2 &cPos = _character.get_pos();
+			boolean collided = false;
 
-			//First check where laser hits a wall with respect to its direction
-			vec2 positionHit = positionOrigin;
-			int id = positionHit[1] * UNITS_X + positionHit[0];
+			do {
+				p1 += direction*unitSize;
+				for (sprite s : sprites[2]) {
 
-			while (world[id] != 0 && world[id] != 1) {
-				positionHit += direction;
-				id = positionHit[1] * UNITS_X + positionHit[0];
-			}
+					if (isSame(s.get_pos(), p1)) {
+						collided = true;
+						break;
+					}
+				}
+			} while (!collided);
+		}*/
+
+		void calcCoordinates(const vec2 &positionOrigin) {
 
 			//Transform abstract coordinates to model-view coordinates
 			float t = (1 - unitSize / 2);
-			p0 = ((positionOrigin-direction/2) * unitSize) - t;
+			p0 = (positionOrigin * unitSize) - t;
 			p0[1] *= -1;
+			p1 = p0;
 
-			p1 = ((positionHit-direction/2) * unitSize) - t;
-			p1[1] *= -1;
+			//Check where laser hits a wall with respect to its orientation
+			boolean collided = false;
+			do  {
+				p1 += direction*unitSize;
+				for (sprite s : sprites[2]) {
+					
+					if (isSame(s.get_pos(), p1)) {
+						collided = true;
+						break;
+					}
+				}
+			} while (!collided);
+
+			//Offset (must not start in middle, but at beginning of tile)
+			p0 -= (direction / 2)*unitSize;
+			p1 -= (direction / 2)*unitSize;
 
 			//Add width to the laser, i.e. 2 more points in space
 			p2 = p1;
@@ -93,15 +89,23 @@ namespace octet {
 			}
 		}
 
+		inline bool isSame(const vec2 v0, const vec2 v1) const {
+			if (fabs(v0[0] - v1[0]) < 0.001) {
+				if (fabs(v0[1] - v1[1]) < 0.001) {
+					return true;
+				}
+			}
+			return false;
+		}
+
 	public:
-		laser(const vec2 _positionOrigin, const vec2 _direction, const float _unitSize, const std::array<int, 1600> &_world) : unitSize(_unitSize), world(_world) {
-			calcCoordinates(_positionOrigin, _direction);
+		laser(const vec2 _positionOrigin, const vec2 _direction, const float _unitSize, const std::array<std::vector<sprite>, 4> &_sprites) : unitSize(_unitSize), sprites(_sprites), direction(_direction) {
+			calcCoordinates(_positionOrigin);
 			texture = resource_dict::get_texture_handle(GL_RGBA, "#ff0000");
 		}
 
-		void render(mat4t &cameraToWorld) {
-			noisy_texture_shader shader;
-			shader.init();
+		void render(noisy_texture_shader &shader, mat4t &cameraToWorld) {
+
 			// build a projection matrix: model -> world -> camera -> projection
 			// the projection space is the cube -1 <= x/w, y/w, z/w <= 1
 			mat4t modelToProjection = mat4t::build_projection_matrix(modelToWorld, cameraToWorld);
@@ -114,6 +118,8 @@ namespace octet {
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 			shader.render(modelToProjection, 0);
+
+			// array with laser ray positions (four corners of rectangle)
 			float vertices[] = {
 				p0[0], p0[1], 0,
 				p1[0], p1[1], 0,
@@ -138,12 +144,13 @@ namespace octet {
 	int windowWidth, windowHeight;
 	int gameStatus = 0;
 	std::array<std::vector<sprite>, 4> sprites;
-	std::array<int, 1600> world;
 	std::vector<laser> lasers;
 	std::shared_ptr<character> thief;
 	sprite thiefSprite;
 
 	texture_shader shader;
+	noisy_texture_shader noisy_shader;
+
 	mat4t cameraToWorld;
 
   public:
@@ -155,11 +162,14 @@ namespace octet {
     void app_init() {
 
 	  shader.init();
+	  noisy_shader.init();
 
       cameraToWorld.loadIdentity();
 	  cameraToWorld.translate(0, 0, 1);
 
 	  load_level(1);
+
+	  srand(time(NULL));
 
     }
 
@@ -189,9 +199,8 @@ namespace octet {
 			}
 		}
 		
-		
 		for (laser l : lasers) {
-			l.render(cameraToWorld);
+			l.render(noisy_shader,cameraToWorld);
 		}
 
 		thief->render(shader, cameraToWorld);
@@ -251,49 +260,49 @@ namespace octet {
 		std::array<string, 4> layerPaths{ path,path,path,path};
 
 		layerPaths[0] += "\\museum_floor.csv";
-		layerPaths[1] += "\\museum_walls.csv";
-		layerPaths[2] += "\\museum_items.csv";
-		layerPaths[3] += "\\world.csv";
-		path += "\\tilesheet.gif";
+		layerPaths[1] += "\\museum_walls_shadows.csv";
+		layerPaths[2] += "\\museum_walls.csv";
+		layerPaths[3] += "\\museum_items.csv";
+		path += "\\tilesheet.tga";
 
 		//Read csv files with level definitions, and initialise sprites
+		std::array<int, 1600> world;
 		for (int i = 0; i < 3; i++) {
 			readCsv(layerPaths[i], world);
 			init_sprites(path, world, spriteSize, sprites[i]);
-			std::array<int, 1600>().swap(world);
 		}
+		readCsv(layerPaths[3], world);
+		init_sprites(path, world, spriteSize, sprites[3]);
 
 		//Read csv file with world definition: abstraction of elements in the world e.g. to collision objects, goal objects, etc.
-		readCsv(layerPaths[3], world);
+		//readCsv(layerPaths[3], world);
 
 		/*
 		Load lasers. Different directions indicated by different type numbers in the world.
-		5: laser up -> low
-		6: laser low -> up
-		7: laser right -> left
-		8: laser left -> right
+		108: laser up -> low
+		123: laser low -> up
+		124: laser right -> left
+		107: laser left -> right
 		*/
 		int posX, posY;
 		for (int id = 0; id < world.size(); ++id){
 			int type = world[id];
-			if (type > 4 && type < 9) {
 				posX = (id%UNITS_X);
 				posY = id / UNITS_Y;
 				switch (type) {
-				case 5:
-					lasers.push_back(laser(vec2(posX, posY), vec2(0, 1), spriteSize, world));
+				case 108:
+					lasers.push_back(laser(vec2(posX, posY), vec2(0, -1), spriteSize, sprites));
 					break;
-				case 6:
-					lasers.push_back(laser(vec2(posX, posY), vec2(0, -1), spriteSize, world));
+				case 123:
+					lasers.push_back(laser(vec2(posX, posY), vec2(0, 1), spriteSize, sprites));
 					break;
-				case 7:
-					lasers.push_back(laser(vec2(posX, posY), vec2(-1, 0), spriteSize, world));
+				case 124:
+					lasers.push_back(laser(vec2(posX, posY), vec2(-1, 0), spriteSize, sprites));
 					break;
-				case 8:
-					lasers.push_back(laser(vec2(posX, posY), vec2(1, 0), spriteSize, world));
+				case 107:
+					lasers.push_back(laser(vec2(posX, posY), vec2(1, 0), spriteSize, sprites));
 					break;
 				}
-			}
 		}
 
 		// Load player character
