@@ -21,57 +21,37 @@ namespace octet {
 	
 	class laser {
 		vec2 p0, p1, p2, p3;
+		vec2 origin, hit, wallHit;
 		mat4t modelToWorld;
 		const std::array<std::vector<sprite>, 4> &sprites;
 		float unitSize;
 		GLuint texture;
-		const vec2 &direction;
+		const vec2 direction;
 
-		/*
-		bool collides(const character &_character) {
-			
-			//Check where laser hits player with respect to its orientation
-			const vec2 &cPos = _character.get_pos();
-			boolean collided = false;
-
-			do {
-				p1 += direction*unitSize;
-				for (sprite s : sprites[2]) {
-
-					if (isSame(s.get_pos(), p1)) {
-						collided = true;
-						break;
-					}
-				}
-			} while (!collided);
-		}*/
-
-		void calcCoordinates(const vec2 &positionOrigin) {
-
-			//Transform abstract coordinates to model-view coordinates
-			float t = (1 - unitSize / 2);
-			p0 = (positionOrigin * unitSize) - t;
-			p0[1] *= -1;
-			p1 = p0;
+		void calcWallHit() {
 
 			//Check where laser hits a wall with respect to its orientation
+			wallHit = origin;
 			boolean collided = false;
-			do  {
-				p1 += direction*unitSize;
+			do {
+				wallHit += direction*unitSize;
 				for (sprite s : sprites[2]) {
-					
-					if (isSame(s.get_pos(), p1)) {
+
+					if (isSame(s.get_pos(), wallHit)) {
 						collided = true;
 						break;
 					}
 				}
 			} while (!collided);
 
-			//Offset (must not start in middle, but at beginning of tile)
-			p0 -= (direction / 2)*unitSize;
-			p1 -= (direction / 2)*unitSize;
+		}
 
-			//Add width to the laser, i.e. 2 more points in space
+		void calcRectangle() {
+			//Offset (must not start in middle, but at beginning of tile)
+			p0 = origin - (direction / 2)*unitSize;
+			p1 = hit - (direction / 2)*unitSize;
+
+			//Calculate other corners of laser rectangle
 			p2 = p1;
 			p3 = p0;
 			float half_width = 0.004;
@@ -100,8 +80,47 @@ namespace octet {
 
 	public:
 		laser(const vec2 _positionOrigin, const vec2 _direction, const float _unitSize, const std::array<std::vector<sprite>, 4> &_sprites) : unitSize(_unitSize), sprites(_sprites), direction(_direction) {
-			calcCoordinates(_positionOrigin);
+			//Assign red texture (could be done once for all instances)
 			texture = resource_dict::get_texture_handle(GL_RGBA, "#ff0000");
+
+			//Transform abstract coordinates to model-view coordinates
+			origin = (_positionOrigin * unitSize) - (1 - unitSize / 2);
+			origin[1] *= -1;
+
+			//Set-up wall coordinates and assign them to laser
+			calcWallHit();
+			hit = wallHit;
+			calcRectangle();
+		}
+
+		bool collides(const character &_character) {
+
+			//Check where laser hits sprite with respect to its orientation
+			const vec2 cPos = _character.get_pos();
+
+			//Outer conditional checks whether sprite close to laser x/y-axis. Inner conditional checks whether sprite between origin and hit point of laser.
+			if (fabs(cPos[0] - origin[0]) < unitSize/2 && fabs(cPos[0] - wallHit[0]) < unitSize/2) {
+				if ((fabs(cPos[1] - origin[1]) < fabs(origin[1] - wallHit[1])) && (fabs(cPos[1] - wallHit[1]) < fabs(origin[1] - wallHit[1]))) {
+					hit = vec2(wallHit[0], cPos[1]);
+					calcRectangle();
+					return true;
+				}
+			}
+			else if (fabs(cPos[1] - origin[1]) < unitSize/2 && fabs(cPos[1] - wallHit[1]) < unitSize/2) {
+				if ((fabs(cPos[0] - origin[0]) < fabs(origin[0] - wallHit[0])) && (fabs(cPos[0] - wallHit[0]) < fabs(origin[0] - wallHit[0]))) {
+					hit = vec2(cPos[0], wallHit[1]);
+					calcRectangle();
+					return true;
+				}
+			}
+
+			//If sprite not in line (anymore), switch back to wall
+			if (!isSame(hit, wallHit)) {
+				hit = wallHit;
+				calcRectangle();
+			}
+
+			return false;
 		}
 
 		void render(noisy_texture_shader &shader, mat4t &cameraToWorld) {
@@ -146,7 +165,6 @@ namespace octet {
 	std::array<std::vector<sprite>, 4> sprites;
 	std::vector<laser> lasers;
 	std::shared_ptr<character> thief;
-	sprite thiefSprite;
 
 	texture_shader shader;
 	noisy_texture_shader noisy_shader;
@@ -204,7 +222,6 @@ namespace octet {
 		}
 
 		thief->render(shader, cameraToWorld);
-		
     }
 
 	// called every frame to move things
@@ -213,34 +230,41 @@ namespace octet {
 			return;
 		}
 
+		//Move character if user pressed a key
+		move_character();
+
 		//Collision detection
-		/*
 		bool collision = false;
-		for (sprite wall : sprites[1]) {
-			collision = thiefSprite.collides_with(wall);
+		for (sprite &wall : sprites[2]) {
+			collision = thief->collides_with(wall);
 			if (collision) {
-				std::cout << "collided!" << std::endl;
 				break;
 			}
-		}*/
-		move_character();
+		}
+		thief->update(!collision);
+
+		//Check if character is in one of the lasers and adjust laser accordingly / trigger alarm
+		for (laser &l : lasers) {
+			l.collides(*thief);
+		}
 	}
 
+	//Character actions: 0=rotateLeft, 1=rotateRight, 2=forward, 3=backward
 	void move_character() {
 		const float walking_speed = 0.05f;
 		// left and right arrows: rotation
 		if (is_key_down(key_left)) {
-			thief->rotateLeft();
+			thief->move(0);
 		}
 		else if (is_key_down(key_right)) {
-			thief->rotateRight();
+			thief->move(1);
 		}
 		// up and down arrows: walking
 		else if (is_key_down(key_up)) {
-			thief->moveForward();
+			thief->move(2);
 		}
 		else if (is_key_down(key_down)) {
-			thief->moveBackward();
+			thief->move(3);
 		}
 	}
 
@@ -274,9 +298,6 @@ namespace octet {
 		readCsv(layerPaths[3], world);
 		init_sprites(path, world, spriteSize, sprites[3]);
 
-		//Read csv file with world definition: abstraction of elements in the world e.g. to collision objects, goal objects, etc.
-		//readCsv(layerPaths[3], world);
-
 		/*
 		Load lasers. Different directions indicated by different type numbers in the world.
 		108: laser up -> low
@@ -307,8 +328,9 @@ namespace octet {
 
 		// Load player character
 		GLuint tex = resource_dict::get_texture_handle(GL_RGBA, "#ffffff");
+		sprite thiefSprite;
 		thiefSprite.init(tex, 1, 7, 0, spriteSize, spriteSize);
-		thief = std::make_shared<character>(world);
+		thief = std::make_shared<character>();
 		thief->init(thiefSprite);
 
 	}

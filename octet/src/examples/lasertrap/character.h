@@ -2,53 +2,78 @@ namespace octet {
 
 	class character {
 		int rotation;
-		const std::array<int, 1600> &world;
 		sprite characterSprite;
+		vec2 prevTrans, targetTrans;
+		bool moved=false;
 
 	public:
-		character(const std::array<int, 1600> &_world) : world(_world) {}
-
-		/*
-		void init(vec2 initialPosition, int initialRotation, sprite _characterSprite)
-		{
-		position = initialPosition;
-		rotation = initialRotation;
-		characterSprite = _characterSprite;
-		}*/
 
 		void init(sprite _characterSprite) {
 			rotation = 0;
 			characterSprite = _characterSprite;
+			prevTrans = vec2();
 		}
 
-		vec2 get_pos() {
+		vec2 get_pos() const {
 			return characterSprite.get_pos();
+		}
+
+		bool collides_with(sprite &s) {
+			return characterSprite.collides_with(s);
 		}
 
 		void render(texture_shader &shader, mat4t &cameraToWorld) {
 			characterSprite.render(shader, cameraToWorld);
 		}
 
-		void rotateLeft() {
-			characterSprite.set_rot(10);
+		void move(int action) {
+
+			if (moved) {
+				return;
+			}
+
+			switch (action) {
+			case 0:
+				characterSprite.set_rot(10);
+				break;
+			case 1:
+				characterSprite.set_rot(-10);
+				break;
+			case 2:
+			{
+				float rad = rotation*(3.14159265f / 180);
+				float x = cosf(rad)*0.01f;
+				float y = sinf(rad)*0.01f;
+				targetTrans = vec2(x, y);
+				moved = true;
+				break;
+			}
+			case 3:
+			{
+				float rad = rotation*(3.14159265f / 180);
+				float x = cosf(rad)*0.01f;
+				float y = sinf(rad)*0.01f;
+				targetTrans = vec2(-x, -y);
+				moved = true;
+				break;
+			}
+			}
 		}
 
-		void rotateRight() {
-			characterSprite.set_rot(-10);
-		}
-
-		void moveForward() {
-			float rad = rotation*(3.14159265f / 180);
-			float x = cosf(rad)*0.01f;
-			float y = sinf(rad)*0.01f;
-			characterSprite.translate(vec2(x, y));
-		}
-
-		void moveBackward() {
-			float rad = rotation*(3.14159265f / 180);
-			float x = cosf(rad)*0.01f;
-			float y = sinf(rad)*0.01f;
-			characterSprite.translate(-vec2(x, y));
+		void update(bool permitted)
+		{
+			if(moved && permitted){
+				characterSprite.translate(targetTrans);
+				prevTrans = targetTrans;
+				moved = false;
+			}
+			if (!permitted) {
+				//Move back a little bit
+				targetTrans *= -1;
+				characterSprite.translate(targetTrans);
+				prevTrans = targetTrans;
+				moved = false;
+			}
 		}
 
 	};

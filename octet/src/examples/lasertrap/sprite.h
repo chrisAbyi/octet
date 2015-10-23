@@ -101,7 +101,7 @@ namespace octet {
 			uvs[1] = 1.0f - (yn + nh);
 		}
 
-		vec2 get_pos() {
+		vec2 get_pos() const {
 			return modelToWorld.row(3).xy();
 		}
 
@@ -179,6 +179,14 @@ namespace octet {
 		// return true if this sprite collides with another.
 		// note the "const"s which say we do not modify either sprite
 		bool collides_with(const sprite &rhs) const {
+			vec2 s1 = rhs.modelToWorld.row(3).xy();
+			vec2 s0 = modelToWorld.row(3).xy();
+			if (sqrt(pow(fabs(s0[0] - s1[0]), 2) + pow(fabs(s0[1] - s1[1]), 2)) < (halfWidth * 3)) {
+				return true;
+			}
+			return false;
+				
+			/*
 			float dx = rhs.modelToWorld[3][0] - modelToWorld[3][0];
 			float dy = rhs.modelToWorld[3][1] - modelToWorld[3][1];
 
@@ -187,6 +195,7 @@ namespace octet {
 			return
 				(fabsf(dx) < halfWidth + rhs.halfWidth) &&
 				(fabsf(dy) < halfHeight + rhs.halfHeight);
+				*/
 		}
 
 		bool is_above(const sprite &rhs, float margin) const {
