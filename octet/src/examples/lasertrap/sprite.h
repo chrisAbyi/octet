@@ -1,3 +1,4 @@
+#pragma once
 
 namespace octet {
 
@@ -178,10 +179,10 @@ namespace octet {
 
 		// return true if this sprite collides with another.
 		// note the "const"s which say we do not modify either sprite
-		bool collides_with(const sprite &rhs) const {
+		bool collides_with(const sprite &rhs, float factor) const {
 			vec2 s1 = rhs.modelToWorld.row(3).xy();
 			vec2 s0 = modelToWorld.row(3).xy();
-			if (sqrt(pow(fabs(s0[0] - s1[0]), 2) + pow(fabs(s0[1] - s1[1]), 2)) < (halfWidth * 2)) {
+			if (sqrt(pow(fabs(s0[0] - s1[0]), 2) + pow(fabs(s0[1] - s1[1]), 2)) < (halfWidth * factor)) {
 				return true;
 			}
 			return false;

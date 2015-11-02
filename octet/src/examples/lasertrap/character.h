@@ -1,3 +1,6 @@
+#pragma once
+
+#include "painting.h"
 namespace octet {
 
 	class character {
@@ -19,7 +22,17 @@ namespace octet {
 		}
 
 		bool collides_with(sprite &s) {
-			return characterSprite.collides_with(s);
+			return characterSprite.collides_with(s, 2);
+		}
+
+		bool close_to(painting &p) {
+			std::vector<sprite> &sprites = p.getSprites();
+			for (sprite &s : sprites) {
+				if (characterSprite.collides_with(s, 2.5)) {
+					return true;
+				}
+			}
+			return false;
 		}
 
 		void render(texture_shader &shader, mat4t &cameraToWorld) {

@@ -218,6 +218,7 @@
     <ClInclude Include="character.h" />
     <ClInclude Include="lasertrap.h" />
     <ClInclude Include="noisy_texture_shader.h" />
+    <ClInclude Include="painting.h" />
     <ClInclude Include="sprite.h" />
   </ItemGroup>
   <ItemGroup>
