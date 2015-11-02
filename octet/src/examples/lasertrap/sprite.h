@@ -181,7 +181,7 @@ namespace octet {
 		bool collides_with(const sprite &rhs) const {
 			vec2 s1 = rhs.modelToWorld.row(3).xy();
 			vec2 s0 = modelToWorld.row(3).xy();
-			if (sqrt(pow(fabs(s0[0] - s1[0]), 2) + pow(fabs(s0[1] - s1[1]), 2)) < (halfWidth * 3)) {
+			if (sqrt(pow(fabs(s0[0] - s1[0]), 2) + pow(fabs(s0[1] - s1[1]), 2)) < (halfWidth * 2)) {
 				return true;
 			}
 			return false;

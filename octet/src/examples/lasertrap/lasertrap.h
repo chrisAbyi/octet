@@ -287,16 +287,17 @@ namespace octet {
 		layerPaths[1] += "\\museum_walls_shadows.csv";
 		layerPaths[2] += "\\museum_walls.csv";
 		layerPaths[3] += "\\museum_items.csv";
-		path += "\\tilesheet.tga";
+		string tilesheetPath = path;
+		tilesheetPath+="\\tilesheet.tga";
 
 		//Read csv files with level definitions, and initialise sprites
 		std::array<int, 1600> world;
 		for (int i = 0; i < 3; i++) {
 			readCsv(layerPaths[i], world);
-			init_sprites(path, world, spriteSize, sprites[i]);
+			init_sprites(tilesheetPath, world, spriteSize, sprites[i]);
 		}
 		readCsv(layerPaths[3], world);
-		init_sprites(path, world, spriteSize, sprites[3]);
+		init_sprites(tilesheetPath, world, spriteSize, sprites[3]);
 
 		/*
 		Load lasers. Different directions indicated by different type numbers in the world.
@@ -327,9 +328,11 @@ namespace octet {
 		}
 
 		// Load player character
-		GLuint tex = resource_dict::get_texture_handle(GL_RGBA, "#ffffff");
+		path += "\\player_2.gif";
+		GLuint tex = resource_dict::get_texture_handle(GL_RGBA, path);
+
 		sprite thiefSprite;
-		thiefSprite.init(tex, 1, 7, 0, spriteSize, spriteSize);
+		thiefSprite.init(tex, 1, 4, 0, spriteSize*1.5, spriteSize*1.5);
 		thief = std::make_shared<character>();
 		thief->init(thiefSprite);
 
