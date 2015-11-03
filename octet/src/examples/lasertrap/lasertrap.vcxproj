@@ -216,6 +216,8 @@
     <ClInclude Include="..\..\shaders\shaders.h" />
     <ClInclude Include="..\..\shaders\texture_shader.h" />
     <ClInclude Include="character.h" />
+    <ClInclude Include="fading_texture_shader.h" />
+    <ClInclude Include="laser.h" />
     <ClInclude Include="lasertrap.h" />
     <ClInclude Include="noisy_texture_shader.h" />
     <ClInclude Include="painting.h" />

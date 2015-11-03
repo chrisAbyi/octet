@@ -2,6 +2,8 @@
 
 namespace octet {
 
+	// Slightly modified sprite class from the Invaderers example
+	// Modifications include getters and setters as well as a modified version of the collision function
 	class sprite {
 
 		// half the width of the sprite
@@ -20,7 +22,7 @@ namespace octet {
 		float uvs[8];
 
 		// Store here so there's no need to decompose model-to-world matrix in order to infer rotation
-		float rotation;
+		int rotation = 0;
 
 	public:
 		// where is our sprite (overkill for a 2D game!)
@@ -106,7 +108,7 @@ namespace octet {
 			return modelToWorld.row(3).xy();
 		}
 
-		float get_rot() {
+		int get_rot() {
 			return rotation;
 		}
 
@@ -114,9 +116,10 @@ namespace octet {
 			modelToWorld.translate(vec3(p.x(), p.y(), 0.0f) - modelToWorld.row(3).xyz());
 		}
 
-		void set_rot(float _rotation) {
+		void set_rot(int _rotation) {
 			modelToWorld.rotate(_rotation,0,0,1);
-			rotation = _rotation;
+			rotation += _rotation;
+			rotation %= 360;
 		}
 
 		void render(texture_shader &shader, mat4t &cameraToWorld) {
@@ -177,8 +180,8 @@ namespace octet {
 			modelToWorld.translate(x, y, 0);
 		}
 
-		// return true if this sprite collides with another.
-		// note the "const"s which say we do not modify either sprite
+		// Modified version of collision function
+		// Uses euclidean distance and allows to set minimum distance for collision to be true
 		bool collides_with(const sprite &rhs, float factor) const {
 			vec2 s1 = rhs.modelToWorld.row(3).xy();
 			vec2 s0 = modelToWorld.row(3).xy();
@@ -186,17 +189,6 @@ namespace octet {
 				return true;
 			}
 			return false;
-				
-			/*
-			float dx = rhs.modelToWorld[3][0] - modelToWorld[3][0];
-			float dy = rhs.modelToWorld[3][1] - modelToWorld[3][1];
-
-			// both distances have to be under the sum of the halfwidths
-			// for a collision
-			return
-				(fabsf(dx) < halfWidth + rhs.halfWidth) &&
-				(fabsf(dy) < halfHeight + rhs.halfHeight);
-				*/
 		}
 
 		bool is_above(const sprite &rhs, float margin) const {

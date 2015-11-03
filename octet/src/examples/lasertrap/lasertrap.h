@@ -1,9 +1,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-// (C) Andy Thomason 2012-2014
-//
+// Octet (C) Andy Thomason 2012-2014
 // Modular Framework for OpenGLES2 rendering on multiple platforms.
 //
+// Lasertrap (C) Christian Guckelsberger 2015
+// Prototype of art-theft stealth game
 
 #include <string>
 #include <sstream>
@@ -13,185 +14,56 @@
 #include "sprite.h"
 #include "character.h"
 #include "painting.h"
+#include "laser.h"
 #include "noisy_texture_shader.h"
+#include "fading_texture_shader.h"
 namespace octet {
 
 	static const int UNITS_X = 40;
 	static const int UNITS_Y = 40;
 	static const int TILE_SIZE = 32;
-	
-	class laser {
-		vec2 p0, p1, p2, p3;
-		vec2 origin, hit, wallHit;
-		mat4t modelToWorld;
-		const std::array<std::vector<sprite>, 5> &sprites;
-		float unitSize;
-		GLuint texture;
-		const vec2 direction;
 
-		void calcWallHit() {
-
-			//Check where laser hits a wall with respect to its orientation
-			wallHit = origin;
-			boolean collided = false;
-			do {
-				wallHit += direction*unitSize;
-				for (sprite s : sprites[2]) {
-
-					if (isSame(s.get_pos(), wallHit)) {
-						collided = true;
-						break;
-					}
-				}
-			} while (!collided);
-
-		}
-
-		void calcRectangle() {
-			//Offset (must not start in middle, but at beginning of tile)
-			p0 = origin - (direction / 2)*unitSize;
-			p1 = hit - (direction / 2)*unitSize;
-
-			//Calculate other corners of laser rectangle
-			p2 = p1;
-			p3 = p0;
-			float half_width = 0.004;
-			if (p0[0] == p1[0]) {
-				p0[0] -= half_width;
-				p1[0] -= half_width;
-				p2[0] += half_width;
-				p3[0] += half_width;
-			}
-			else {
-				p0[1] -= half_width;
-				p1[1] -= half_width;
-				p2[1] += half_width;
-				p3[1] += half_width;
-			}
-		}
-
-		inline bool isSame(const vec2 v0, const vec2 v1) const {
-			if (fabs(v0[0] - v1[0]) < 0.001) {
-				if (fabs(v0[1] - v1[1]) < 0.001) {
-					return true;
-				}
-			}
-			return false;
-		}
-
-	public:
-		laser(const vec2 _positionOrigin, const vec2 _direction, const float _unitSize, const std::array<std::vector<sprite>, 5> &_sprites) : unitSize(_unitSize), sprites(_sprites), direction(_direction) {
-			//Assign red texture (could be done once for all instances)
-			texture = resource_dict::get_texture_handle(GL_RGBA, "#ff0000");
-
-			//Transform abstract coordinates to model-view coordinates
-			origin = (_positionOrigin * unitSize) - (1 - unitSize / 2);
-			origin[1] *= -1;
-
-			//Set-up wall coordinates and assign them to laser
-			calcWallHit();
-			hit = wallHit;
-			calcRectangle();
-		}
-
-		bool collides(const character &_character) {
-
-			//Check where laser hits sprite with respect to its orientation
-			const vec2 cPos = _character.get_pos();
-
-			//Outer conditional checks whether sprite close to laser x/y-axis. Inner conditional checks whether sprite between origin and hit point of laser.
-			if (fabs(cPos[0] - origin[0]) < unitSize/2 && fabs(cPos[0] - wallHit[0]) < unitSize/2) {
-				if ((fabs(cPos[1] - origin[1]) < fabs(origin[1] - wallHit[1])) && (fabs(cPos[1] - wallHit[1]) < fabs(origin[1] - wallHit[1]))) {
-					hit = vec2(wallHit[0], cPos[1]);
-					calcRectangle();
-					return true;
-				}
-			}
-			else if (fabs(cPos[1] - origin[1]) < unitSize/2 && fabs(cPos[1] - wallHit[1]) < unitSize/2) {
-				if ((fabs(cPos[0] - origin[0]) < fabs(origin[0] - wallHit[0])) && (fabs(cPos[0] - wallHit[0]) < fabs(origin[0] - wallHit[0]))) {
-					hit = vec2(cPos[0], wallHit[1]);
-					calcRectangle();
-					return true;
-				}
-			}
-
-			//If sprite not in line (anymore), switch back to wall
-			if (!isSame(hit, wallHit)) {
-				hit = wallHit;
-				calcRectangle();
-			}
-
-			return false;
-		}
-
-		void render(noisy_texture_shader &shader, mat4t &cameraToWorld) {
-
-			// build a projection matrix: model -> world -> camera -> projection
-			// the projection space is the cube -1 <= x/w, y/w, z/w <= 1
-			mat4t modelToProjection = mat4t::build_projection_matrix(modelToWorld, cameraToWorld);
-
-			// set up opengl to draw textured triangles using sampler 0 (GL_TEXTURE0)
-			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, texture);
-
-			// use "old skool" rendering
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			shader.render(modelToProjection, 0);
-
-			// array with laser ray positions (four corners of rectangle)
-			float vertices[] = {
-				p0[0], p0[1], 0,
-				p1[0], p1[1], 0,
-				p2[0], p2[1], 0,
-				p3[0], p3[1], 0
-			};
-
-			// attribute_pos (=0) is position of each corner
-			// each corner has 3 floats (x, y, z)
-			// there is no gap between the 3 floats and hence the stride is 3*sizeof(float)
-			glVertexAttribPointer(attribute_pos, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)vertices);
-			glEnableVertexAttribArray(attribute_pos);
-
-			// finally, draw the sprite (4 vertices)
-			glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-		}
-
-	};
-
-  /// Scene containing a box with octet.
-  class lasertrap : public app {
+// Prototype of art-theft stealth game
+class lasertrap : public app {
 	int windowWidth, windowHeight;
-	int gameStatus = 0;
-	std::string statusText;
-	std::array<std::vector<sprite>, 5> sprites;
-	std::vector<laser> lasers;
-	std::shared_ptr<character> thief;
-	std::vector<painting> paintings;
-	int score = 0;
 
+	// container for all sprites in the game on different depth levels (starting with floor, then wall shadows, then walls, etc.)
+	std::array<std::vector<sprite>, 5> sprites;
+	
+	// containers for game objects
+	std::vector<laser> lasers;
+	std::vector<painting> paintings;
+	std::vector<sprite> mirrors;
+
+	// game metrics
+	int gameStatus = 0;
+	int score = 0;
+	int nMirrors = 3;
+
+	// using a pointer to the player's character, because there's no default initializer available, but it must be globally accessible
+	std::shared_ptr<character> thief;
+
+	// the different shaders used in the game
 	texture_shader shader;
 	noisy_texture_shader noisy_shader;
+	fading_texture_shader fading_shader;
 
 	// a texture and font for our text
-	GLuint font_texture;
 	bitmap_font font;
+	GLuint font_texture;
+
+	// a texture to be used for mirrors
+	GLuint white_texture;
 
 	mat4t cameraToWorld;
 
+	// used to draw an arbitrary text on the screen. Taken from Invaderers example.
 	void draw_text(texture_shader &shader, float x, float y, float scale, const char *text) {
 		mat4t modelToWorld;
 		modelToWorld.loadIdentity();
 		modelToWorld.translate(x, y, 0);
 		modelToWorld.scale(scale, scale, 1);
 		mat4t modelToProjection = mat4t::build_projection_matrix(modelToWorld, cameraToWorld);
-
-		/*mat4t tmp;
-		glLoadIdentity();
-		glTranslatef(x, y, 0);
-		glGetFloatv(GL_MODELVIEW_MATRIX, (float*)&tmp);
-		glScalef(scale, scale, 1);
-		glGetFloatv(GL_MODELVIEW_MATRIX, (float*)&tmp);*/
 
 		enum { max_quads = 32 };
 		bitmap_font::vertex vertices[max_quads * 4];
@@ -219,26 +91,31 @@ namespace octet {
 	/// this is called once OpenGL is initialized
     void app_init() {
 
+	  // initialize all shaders
 	  shader.init();
 	  noisy_shader.init();
+	  fading_shader.init();
 
       cameraToWorld.loadIdentity();
 	  cameraToWorld.translate(0, 0, 1);
 
-	  statusText = "ongoing";
+	  // load globally used textures
 	  font_texture = resource_dict::get_texture_handle(GL_RGBA, "assets/big_0.gif");
+	  white_texture = resource_dict::get_texture_handle(GL_RGBA, "#ffffff");
 
-	  load_level(1);
-
+	  // seed random number generator to be used with noisy_texture_shader
 	  srand(time(NULL));
+
+	  // load the first level
+	  load_level(1);
 
     }
 
     /// this is called to draw the world
     void draw_world(int x, int y, int w, int h) {
+
+		// simulate world - this is mainly about moving the player, placing / collecting mirrors, and collision detection
 		simulate();
-		//++framecount;
-		//player.move((framecount / 4) % 4);
 
 		// set a viewport - includes whole window area
 		glViewport(x, y, w, h);
@@ -261,14 +138,24 @@ namespace octet {
 			}
 		}
 		
-		// draw lasers with noise using special shader
+		// draw lasers with noise using dedicated shader
 		for (laser l : lasers) {
 			l.render(noisy_shader,cameraToWorld);
 		}
 
-		// draw paintings which can be collected
+		// draw paintings and highlight those which can be collected
 		for (painting p : paintings) {
-			p.render(shader, cameraToWorld);
+			if (thief->close_to(p)) {
+				p.render(fading_shader, cameraToWorld);
+			}
+			else {
+				p.render(shader, cameraToWorld);
+			}
+		}
+
+		// draw mirrors which can be collected
+		for (sprite m : mirrors) {
+			m.render(shader, cameraToWorld);
 		}
 
 		// draw character
@@ -276,11 +163,11 @@ namespace octet {
 
 		// draw information on running game
 		char score_text[50];
-		sprintf(score_text, "Score: %d, Status: %d\n", score, gameStatus);
+		sprintf(score_text, "Score: %d, Mirrors: %d, Status: %d, \n", score, nMirrors, gameStatus);
 		draw_text(shader, 0.7f, 0.75f, 1.0f / 1024, score_text);
     }
 
-	// called every frame to move things
+	// simulate world - this is mainly about moving the player, placing / collecting mirrors, and collision detection
 	void simulate() {
 
 		if (gameStatus!=0) {
@@ -290,7 +177,7 @@ namespace octet {
 		//Move character if user pressed a key
 		perform_character();
 
-		//Ordinary collision detection
+		//Ordinary collision detection. Only update the player character's sprite if there is no collision
 		bool collision = false;
 		for (sprite &wall : sprites[2]) {
 			collision = thief->collides_with(wall);
@@ -308,16 +195,23 @@ namespace octet {
 		}
 		thief->update(!collision);
 
-		//Check if character is in one of the lasers and adjust laser accordingly / trigger alarm
+		//Check if mirror is in one of the lasers and adjust them accordingly
 		for (laser &l : lasers) {
-			if (l.collides(*thief)) {
-				gameStatus = -1;
-				statusText = "caught!";
+			for (sprite mirrorSprite : mirrors) {
+				l.collides(mirrorSprite.get_pos());
 			}
 		}
+
+		//Check if character is in one of the lasers and adjust laser accordingly / trigger alarm
+		for (laser &l : lasers) {
+			if (l.collides(thief->get_pos())) {
+				gameStatus = -1;
+			}
+		}
+
 	}
 
-	//Character actions: 0=rotateLeft, 1=rotateRight, 2=forward, 3=backward
+	//Character actions: 0=rotate counterclockwise, 1=rotate clockwise, 2=move forward, 3=move backward
 	void perform_character() {
 		const float walking_speed = 0.05f;
 		// left and right arrows: rotation
@@ -334,27 +228,61 @@ namespace octet {
 		else if (is_key_down(key_down)) {
 			thief->move(3);
 		}
-		// if thief is close enough to a painting to grab it, get it and increase score by a small amount of credits. If it's the goal painting, increase score massively and set game status to won.
-		else if (is_key_down(key_space)) {
-			bool closeToPainting = false;
-			for (int i = 0; i < paintings.size(); i++){
+		// if thief is close enough to a painting to grab it, get it.
+		else if (is_key_going_up(key_space)) {
+
+			//Check if close to painting: pick it up
+			for (int i = 0; i < paintings.size(); i++) {
 				if (thief->close_to(paintings[i])) {
-					paintings.erase(paintings.begin()+i);
+					paintings.erase(paintings.begin() + i);
+
+					// If ordinary painting, increase player score by a small amount of credits.
+					// If it's the goal painting, increase score massively and set game status to won.
 					if (paintings[i].getIsMainObjective()) {
 						score += 10000;
 						gameStatus = 1;
-						statusText = "won!";
 					}
 					else {
 						score += (rand() % (int)1001);
 					}
-					break;
+					return;
 				}
 			}
 
+			//Check if close to mirror: pick it up
+			for (int i = 0; i < mirrors.size(); i++) {
+				if (thief->collides_with(mirrors[i])) {
+					mirrors.erase(mirrors.begin() + i);
+					++nMirrors;
+
+					for (laser &l : lasers) {
+						l.reset();
+					}
+					return;
+				}
+			}
+
+			//Else, place mirror if there are still mirrors available
+			if(nMirrors>0){
+
+				sprite mirrorSprite;
+				float spriteSize = 1.0f / std::min((windowWidth / UNITS_X), (windowHeight / UNITS_Y));
+				vec2 thiefPosition = thief->get_pos();
+				int thiefRotation = thief->get_rot();
+				float rad = thiefRotation*(3.14159265f / 180);
+				thiefPosition[0]= thiefPosition[0] + cosf(rad)*0.1f;
+				thiefPosition[1] = thiefPosition[1] + sinf(rad)*0.1f;
+
+				mirrorSprite.init(white_texture, 0, 0, 0, spriteSize, spriteSize);
+				mirrorSprite.set_pos(thiefPosition);
+				mirrors.push_back(mirrorSprite);
+
+				--nMirrors;
+			}
 		}
 	}
 
+	// load level with level number from .csv files
 	void load_level(int n) {
 
 		//Adjust sprite size to fill viewport on shortest side
@@ -369,7 +297,6 @@ namespace octet {
 		//Create paths to csv files for each layer
 		string path(buf);
 		std::array<string, 6> layerPaths{ path,path,path,path,path,path};
-
 		layerPaths[0] += "\\museum_floor.csv";
 		layerPaths[1] += "\\museum_walls_shadows.csv";
 		layerPaths[2] += "\\museum_walls.csv";
@@ -379,7 +306,7 @@ namespace octet {
 		string tilesheetPath = path;
 		tilesheetPath+="\\tilesheet.tga";
 
-		//Read csv files with level definitions, and initialise sprites
+		//Read csv files with level definitions, and initialise sprites (floor, wall shadows, walls, obstacles such as couches)
 		std::array<int, 1600> world;
 		GLuint tilesheetId = resource_dict::get_texture_handle(GL_RGBA, tilesheetPath);
 		int tilesheet_size = 512;
@@ -388,18 +315,18 @@ namespace octet {
 			init_sprites(tilesheetId, tilesheet_size, world, spriteSize, sprites[i]);
 		}
 
-		//readCsv(layerPaths[3], world);
+		// initialise lasers separetely, because they will be initialised as dedicated objects
 		init_lasers(world, spriteSize);
 
+		// initialise paintings separetely, because they will be initialised as dedicated objects
 		std::array<int, 1600> goalPaintings;
 		readCsv(layerPaths[5], world);
 		init_paintings(tilesheetId, tilesheet_size, world, spriteSize);
 		paintings.back().setIsMainObjective(true);
 
-		// Load player character
+		// load player character
 		path += "\\player.gif";
 		GLuint tex = resource_dict::get_texture_handle(GL_RGBA, path);
-
 		sprite thiefSprite;
 		thiefSprite.init(tex, 1, 4, 0, spriteSize*1.5, spriteSize*1.5);
 		thief = std::make_shared<character>();
@@ -473,14 +400,18 @@ namespace octet {
 		}
 	}
 
+	// load lasers into dedicated objects.
+	// Load lasers. Different directions indicated by different type numbers in the world.
+	// 108: laser up -> low
+	// 123: laser low -> up
+	// 124: laser right -> left
+	// 107: laser left -> right
 	void init_lasers(const std::array<int, 1600> &values, const float spriteSize) {
-		/*
-		Load lasers. Different directions indicated by different type numbers in the world.
-		108: laser up -> low
-		123: laser low -> up
-		124: laser right -> left
-		107: laser left -> right
-		*/
+		
+		// red texture for the laser
+		GLuint texture = resource_dict::get_texture_handle(GL_RGBA, "#ff0000");
+
+		// distinguish between lasers pointing into different directions and initialise the object accordingly
 		int posX, posY;
 		for (int id = 0; id < values.size(); ++id) {
 			int type = values[id];
@@ -488,16 +419,16 @@ namespace octet {
 			posY = id / UNITS_Y;
 			switch (type) {
 			case 108:
-				lasers.push_back(laser(vec2(posX, posY), vec2(0, -1), spriteSize, sprites));
+				lasers.push_back(laser(texture, vec2(posX, posY), vec2(0, -1), spriteSize, sprites[2], mirrors));
 				break;
 			case 123:
-				lasers.push_back(laser(vec2(posX, posY), vec2(0, 1), spriteSize, sprites));
+				lasers.push_back(laser(texture, vec2(posX, posY), vec2(0, 1), spriteSize, sprites[2], mirrors));
 				break;
 			case 124:
-				lasers.push_back(laser(vec2(posX, posY), vec2(-1, 0), spriteSize, sprites));
+				lasers.push_back(laser(texture, vec2(posX, posY), vec2(-1, 0), spriteSize, sprites[2], mirrors));
 				break;
 			case 107:
-				lasers.push_back(laser(vec2(posX, posY), vec2(1, 0), spriteSize, sprites));
+				lasers.push_back(laser(texture, vec2(posX, posY), vec2(1, 0), spriteSize, sprites[2], mirrors));
 				break;
 			}
 		}
@@ -521,10 +452,6 @@ namespace octet {
 				sprites.back().init(tilesheetId, posX, posY, 0, spriteSize, spriteSize, texId, TILE_SIZE, TILE_SIZE, tilesheet_size, tilesheet_size);
 			}
 		}
-	}
-
-	void init_paintings(const char *pathTilesheet, const std::array<int, 1600> &values, const float spriteSize, std::vector<sprite> &sprites) {
-	
 	}
 
   };

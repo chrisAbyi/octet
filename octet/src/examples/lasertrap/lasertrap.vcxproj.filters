@@ -432,6 +432,8 @@
     <ClInclude Include="character.h" />
     <ClInclude Include="noisy_texture_shader.h" />
     <ClInclude Include="painting.h" />
+    <ClInclude Include="laser.h" />
+    <ClInclude Include="fading_texture_shader.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\resources\mesh_builder.inl">
