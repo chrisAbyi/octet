@@ -163,8 +163,8 @@ class lasertrap : public app {
 
 		// draw information on running game
 		char score_text[50];
-		sprintf(score_text, "Score: %d, Mirrors: %d, Status: %d, \n", score, nMirrors, gameStatus);
-		draw_text(shader, 0.7f, 0.75f, 1.0f / 1024, score_text);
+		sprintf(score_text, "Score: %d \nMirrors: %d \nStatus: %d \n", score, nMirrors, gameStatus);
+		draw_text(shader, 0.85f, 0.75f, 1.0f / 1024, score_text);
     }
 
 	// simulate world - this is mainly about moving the player, placing / collecting mirrors, and collision detection

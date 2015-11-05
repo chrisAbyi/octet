@@ -28,7 +28,7 @@ namespace octet {
 		}
 
 		bool collides_with(sprite &s) {
-			return characterSprite.collides_with(s, 2);
+			return characterSprite.collides_with(s, 1.5);
 		}
 
 		// Check whether character is close to a painting, by checking whether the character is close to any of the sprites associated with the painting

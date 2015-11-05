@@ -29,7 +29,7 @@ namespace octet {
 			void main() {
 				//Sine function used for smooth fading
 				//Should generate alternating alpha values between 0.5..1
-				float a = ((sin(phase)+1.0)/4.0)+0.5;
+				float a = ((sin(phase)+1.0)/2.0);
 				gl_FragColor = texture2D(sampler, uv_) * vec4(1, 1, 1, a);
 			}
 			);
